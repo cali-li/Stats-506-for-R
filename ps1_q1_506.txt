@@ -1,0 +1,30 @@
+﻿#!/bin/bash
+
+ssh lwenjing@login.itd.umich.edu
+#Q1.a
+find recs2015_public_v4.csv    #check if data has already been there. And the output says "No".
+touch recs2015_public_v4.csv   #create a new file name as the name of data set.
+#get the data from website.
+wget https://www.eia.gov/consumption/residential/data/2015/csv/recs2015_public_v4.csv >> recs2015_public_v4.csv
+
+#Q1.b one-liner
+head -n 1 recs2015_public_v4.csv.1 | tr "," "\n" > recs_names.txt 
+#Explain: head -n1 is to get the head of data set
+#tr is replacing the delimiter for line breaks
+#and then put the output into a new file named "recs_names.txt"
+
+#Q1.c one-liner
+grep -n -e "^BRRWT" -e "DOEID" recs_names.txt | cut -d":" -f1 | paste -s -d ","
+#Explain: grep filter searches a file for a particular pattern of characters, 
+#and displays all lines that contain that pattern.
+#-n means output no. of the line.
+#-e means multipule works at one line.
+#cut command is to get the first number of the grep output, specifically is the column number.
+#tr command replace the delimiter.
+
+#Q1.d
+cols=$(grep -n -e "^BRRWT" -e "DOEID" recs_names.txt | cut -d":" -f1 | paste -s -d ",")
+awk '{print $columns}' columns=$cols recs2015_public_v4.csv > recs_weights.csv
+
+#Q2
+

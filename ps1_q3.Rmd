@@ -1,0 +1,181 @@
+---
+title: "ps1_question3"
+author: "Cali Li"
+date: "9/20/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## input data
+
+Using code as below:
+
+```{r read table}
+train = read.table('C:/Users/wenji/Downloads/train_trajectories.csv',sep = ',',header = TRUE)
+```
+
+
+```{r echo = FALSE}
+#function summary
+#data transformation at first
+my_data =function(my_mx){
+  #input trajectory(x,y,t)
+  #output: #initialize data, s.t. at time 0, mouse is at the origin point.
+  n = nrow(my_mx)
+  i = 1
+  my_mx2 = matrix(nrow = n, ncol = 3)
+  while (i <= n) {
+    my_mx2[i,] = my_mx[i,] - my_mx[1,]
+    i = i+1
+  }
+  return(my_mx2)
+}
+
+#Q3.b
+my_angle = function(my_mx){
+  #input: trajectory (x, y, t),
+  #(x, y) is the position of a mouse cursor in the monitor.
+  #output: the angle ?? connecting the origin and the final position in the trajectory.
+  my_mx = my_data(my_mx)                 #data initializing
+  n = nrow(my_mx)
+  theta = atan2(my_mx[n,2],my_mx[n,1])   #compute the angle
+  return(theta)                          #output angle theta
+}
+
+#Q3.c
+my_rotate = function(my_mx){
+  #input: trajectory (x, y, t),
+  #(x, y) is the position of a mouse cursor in the monitor.
+  #output: If the final position is at the negetive x-axis part, 
+  #rotate the coordinates to make it positive
+  my_mx1 = my_data(my_mx)
+  n = nrow(my_mx)
+  my_mx2 = matrix(nrow = n, ncol = 3)    #generate new matrix
+  for (i in 1:n) {                       #output in new matrix
+    my_mx2[i,1] = sqrt((my_mx1[i,1])^2 + (my_mx1[i,2])^2)*sin((atan2(my_mx1[i,2],my_mx1[i,1]))-(atan2(my_mx1[n,2],my_mx1[n,1])-pi/2))
+    my_mx2[i,2] = sqrt((my_mx1[i,1])^2 + (my_mx1[i,2])^2)*cos((atan2(my_mx1[i,2],my_mx1[i,1]))-(atan2(my_mx1[n,2],my_mx1[n,1])-pi/2))
+    my_mx2[i,3] = my_mx1[i,3]
+  }
+  return(my_mx2)
+}
+
+#Q3.e
+my_curv = function(my_mx) {
+  #input: same
+  #output: put above metrics together describing curvature
+  y = c("dis" = my_curv1(my_mx),
+        "max_ad" = my_curv2(my_mx),
+        "mean_ad" = my_curv3(my_mx),
+        "area" = my_curv4(my_mx))
+  return(y)
+}
+
+my_curv1 = function(my_mx) {
+  #input: the same as foreward
+  #output: total distance
+  n = nrow(my_mx)
+  dis = 0
+  i = 1
+  while (i < n) {           #compute the total (Euclidean) distance
+  dis = dis + sqrt((my_mx[i,1]-my_mx[i+1,1])^2 + (my_mx[i,2]-my_mx[i+1,2])^2)
+  i = i + 1
+  }
+  return(dis)               #return the value
+}
+
+my_curv2 = function(my_mx) {
+  #input: same
+  #output: maximum absolute deviation from the secant connecting the starting and final positions,
+  n = nrow(my_mx)
+  my_mx = my_rotate(my_mx)
+  y = abs(my_mx[,2])                 #y is a vector of absolute deviation
+  i = 1
+  while (i <= n) {
+    if (y[i] == max(y)) return(y[i]) #find the maximun absolute deviation
+    i = i + 1
+  }
+}
+
+my_curv3 = function(my_mx) {
+  #input: same
+  #output: average absolute deviation
+  n = nrow(my_mx)
+  my_mx = my_rotate(my_mx)
+  y = abs(my_mx[,2])                 #y is a vector of absolute deviation
+  mean(y)                            #average absolute deviation
+}
+
+my_curv4 = function(my_mx) {
+  #input: same as above
+  #output:  (absolute) area under the curve
+  n = nrow(my_mx)
+  my_mx = my_rotate(my_mx)
+  area = 0
+  i = 1
+  while (i < n) {             #compute absolute area using the trapezoidal rule
+      area = area + (my_mx[i,1]-my_mx[i+1,1])*(abs(my_mx[i,2])+abs(my_mx[i+1,2]))/2
+      i = i + 1
+  }
+  area = abs(area)
+  return(area)
+}
+```
+
+## input training data set and compute it.
+
+```{r echo = FALSE}
+s1=subset(train,train$subject_nr==1 & train$count_trial==2,select=3:5)
+s2=subset(train,train$subject_nr==1 & train$count_trial==3,select=3:5)
+s3=subset(train,train$subject_nr==1 & train$count_trial==4,select=3:5)
+s4=subset(train,train$subject_nr==1 & train$count_trial==5,select=3:5)
+s5=subset(train,train$subject_nr==1 & train$count_trial==6,select=3:5)
+s1 = as.matrix(s1)
+s2 = as.matrix(s2)
+s3 = as.matrix(s3)
+s4 = as.matrix(s4)
+s5 = as.matrix(s5)
+result = matrix(nrow = 5,ncol = 4)
+result[1,] = my_curv(s1)
+result[2,] = my_curv(s2)
+result[3,] = my_curv(s3)
+result[4,] = my_curv(s4)
+result[5,] = my_curv(s5)
+colnames(result) = c('tot_dist','max_abs','avg_abs_dev','AUC')
+rownames(result) = c('(1,2)','(1,3)','(1,4)','(1,5)','(1,6)')
+result
+```
+
+From the result above, we can find that the computation is great expect the area estimation. We still can use the first three line getting an accurate result.
+
+## compute test data set
+Input test data set and compute it.
+
+```{r echo = TRUE}
+
+test = read.table('C:/Users/wenji/Downloads/test_trajectories.csv',sep = ',',header = TRUE)
+#split data into different tables
+t1=subset(test,test$subject_nr==6 & test$count_trial==1,select=1:5)
+t2=subset(test,test$subject_nr==7 & test$count_trial==1,select=1:5)
+t3=subset(test,test$subject_nr==8 & test$count_trial==1,select=1:5)
+t4=subset(test,test$subject_nr==9 & test$count_trial==1,select=1:5)
+t5=subset(test,test$subject_nr==10 & test$count_trial==1,select=1:5)
+#transform data
+my_tra1 = as.matrix(t1[,3:5])
+my_tra2 = as.matrix(t2[,3:5])
+my_tra3 = as.matrix(t3[,3:5])
+my_tra4 = as.matrix(t4[,3:5])
+my_tra5 = as.matrix(t5[,3:5])
+#compute data
+t_result = matrix(nrow = 5,ncol = 4)
+t_result[1,] = my_curv(my_tra1)
+t_result[2,] = my_curv(my_tra2)
+t_result[3,] = my_curv(my_tra3)
+t_result[4,] = my_curv(my_tra4)
+t_result[5,] = my_curv(my_tra5)
+colnames(t_result) = c('tot_dist','max_abs','avg_abs_dev','AUC')
+rownames(t_result) = c('(6,1)','(7,1)','(8,1)','(9,1)','(10,1)')
+t_result
+```

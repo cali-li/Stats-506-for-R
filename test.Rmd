@@ -1,0 +1,46 @@
+---
+title: "Stats500_HW1"
+author: "Cali Li"
+#date: "9/14/2019"
+output: html_document
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{ }
+data(sat)
+summary(sat)
+```
+
+## Explain the summary chunk
+From the summary result, we can find that the data range is normal. No missing data exists.
+
+We can also make a graphical summary:
+
+```{}
+plot(density(sat$total))
+plot(density(sat$expend))
+plot(density(sat$takers))
+```
+
+Note that the expenditure and SAT score don't share the similar pattern. Most familt tended to spend less, while half of these pupils tended to get a high score leaving half of them have a bad performance at SAT exam. It seems like the expenditure doed not have a huge influence on SAT score.
+
+Another thing that worth mentioning is that the SAT score and the percentage of shudents who took the exam have the same pattern. Does that mean more takers will cause higher score? We should get another plot about that.
+
+```{}
+pairs(sat)
+```
+
+Note that the higher expenditure will cause higher salary for teachers, that make sense. Interestingly, for those families who expent a lot on tuition, is seems like their children had a trend to get a lower score at SAT exam.
+
+Also, if teacher's salary goes up, the percentage of student who take exam also goes up. Actually the taker percentage goes up may not because of it, but they should have similar trend fo sure.
+
+Another thing worth mentioning is that with more takers, their SAT score tends to go down. That is weird since if more students take the exam, the number of students who get a high score should increase.
