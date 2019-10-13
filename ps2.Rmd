@@ -1,0 +1,423 @@
+---
+title: "ps2"
+author: "Cali Li"
+date: "10/11/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data setup
+```{r, echo=FALSE}
+# load packages:
+library(tidyverse)
+library(lme4)
+library(lmerTest)
+library(mousetrap)
+library(kableExtra) 
+
+# read or load data: -----------------------------------------------------------
+
+recs = readr::read_delim('C:/Users/wenji/Downloads/recs2015_public_v4.csv',
+                             delim=',')
+
+```
+
+## Question 1.a
+
+```{r, echo=FALSE}
+# Question 1.a: ----------------------------------------------------------------
+# the national average home temperature at night in winter
+# (among homes that use space heating).
+# variable in data: TEMPHOME == 1 ---> use space heating
+#                   TEMPNITE != -2 ---> Winter temperature at night
+
+# Mean by final & replicate weights: -------------------------------------------
+mean_replicate = recs %>%
+  filter(HEATHOME == 1 & TEMPNITE != -2) %>%
+  gather(key = 'replicate', value = 'BRRWT', BRRWT1:BRRWT96) %>%
+  select(replicate, BRRWT, TEMPNITE, NWEIGHT) %>%
+  group_by(replicate) %>%
+  mutate( means_rep = TEMPNITE * BRRWT / sum(BRRWT),
+          means_tot = TEMPNITE * NWEIGHT / sum(NWEIGHT)) %>%
+  ungroup() %>%
+  summarize( std_err = sqrt( sum( {means_rep - means_tot}^2 ) *4/96 ),
+             lwr = sum(means_tot) - qnorm(.975)*std_err,
+             upr = sum(means_tot) + qnorm(.975)*std_err) %>%
+  select(-std_err, means_tot)
+mean_replicate
+```
+
+
+## Question 1.c
+
+```{r, echo = FALSE}
+decode_division = function(x){
+  # Decodes numeric codes to division labels
+  #
+  # Args: 
+  #   x: a single numeric code for a DIVISION
+  #
+  # Returns: The division label
+  
+  # Throw an error if x isn't numeric
+  if(!is.numeric(x) | x < 1) stop('decode_division expects numeric input 
+                                  indexed from 1!')
+  
+  switch(x,
+         "NewEng", "MidAtlan", "ENCen",
+         "WNCentral", "SoutAtlan", "ESCen",
+         "WSCentral", "MountNth", "MountSth",
+         "Pacific"
+  )
+}
+decode_all_division = function(x){
+  # Vectorizes decode_division above
+  #
+  # Args: 
+  #  x: a vector of integer-valued division
+  #
+  # Returns: A vector of division labes or a "list" if some are unmatched.
+  sapply(x, decode_division)
+}
+
+## urban type
+decode_uatyp = function(x){
+  
+  if(x != "U" & x!= "C" & x != "R") stop('Invaild input for decode_uatyp!')
+  
+  switch(x,
+         "U" = "UrbanArea",
+         "C" = "UrbanCluster",
+         "R" = "Rural"
+  )
+}
+decode_all_uatyp = function(x){
+  # Vectorizes decode_uatyp above
+  #
+  # Args: 
+  #  x: a vector of integer-valued uatyp
+  #
+  # Returns: A vector of uatyp labes or a "list" if some are unmatched.
+  sapply(x, decode_uatyp)
+}
+
+## fuelheat
+decode_fuel = function(x){
+  if(!is.numeric(x)) stop('decode_fuel expects numeric input!')
+  x = as.character(x)
+  switch(x,
+         "1" = "NaturalGas",
+         "2" = "Propane",
+         "3" = "OilKerosene",
+         "5" = "Electricity",
+         "7" = "Wood",
+         "21" = "OtherFuel",
+         "-2" = "NotApplicable"
+  )
+}
+decode_all_fuel = function(x){
+  # Vectorizes decode_fuel above
+  #
+  # Args: 
+  #  x: a vector of integer-valued heatfuel
+  #
+  # Returns: A vector of fuel labes or a "list" if some are unmatched.
+  sapply(x, decode_fuel)
+}
+
+temp_nweights = recs %>% 
+  filter(TEMPNITE >= 0 , TEMPGONE >= 0 , TEMPHOME >= 0) %>%
+  mutate(division = decode_all_division(DIVISION), 
+         uatyp = decode_all_uatyp(UATYP10)) %>%
+  select(division, uatyp, tempnite = TEMPNITE, tempgone = TEMPGONE, 
+         temphome = TEMPHOME, weight = NWEIGHT) %>%
+  group_by(division, uatyp) %>%
+  summarize( w4tempnite = sum(tempnite*weight) / sum(weight),
+             w4tempgone = sum(tempgone*weight) / sum(weight),
+             w4temphome = sum(temphome*weight) / sum(weight)
+              )
+
+# Mean by replicate weights & plot:
+temp_replicate = recs %>%
+  filter(TEMPNITE >= 0 , TEMPGONE >= 0 , TEMPHOME >= 0) %>%
+  tidyr::pivot_longer(cols = starts_with('BRRWT'),
+                      names_to = 'replicate',
+                      values_to = 'BRRWT') %>%
+  mutate(division = decode_all_division(DIVISION), 
+         uatyp = decode_all_uatyp(UATYP10)) %>%
+  select(division, uatyp, tempnite = TEMPNITE, tempgone = TEMPGONE, 
+         temphome = TEMPHOME, weight = NWEIGHT,replicate, BRRWT) %>%
+  replace_na(list(weight = 0)) %>%
+  group_by(division, uatyp,replicate) %>%
+  summarize(tempnite_rep = sum(tempnite * BRRWT) / sum(BRRWT),
+            tempgone_rep = sum(tempgone * BRRWT) / sum(BRRWT),
+            temphome_rep = sum(temphome * BRRWT) / sum(BRRWT)
+             ) %>%
+  ungroup() %>%
+  left_join(temp_nweights, by = c('division', 'uatyp')) %>%
+  group_by(division, uatyp) %>%
+  summarize(w4tempnite = w4tempnite[1],                      # Compute se.
+            w4tempgone = w4tempgone[1],
+            w4temphome = w4temphome[1],
+            std_err4tempnite = sqrt( sum( {tempnite_rep - w4tempnite}^2 )*4/96 ),
+            std_err4tempgone = sqrt( sum( {tempgone_rep - w4tempgone}^2 )*4/96 ),
+            std_err4temphome = sqrt( sum( {temphome_rep - w4temphome}^2 )*4/96 )
+            ) %>%
+  mutate(ci4tempnite = qnorm(.975)*std_err4tempnite,
+         ci4tempgone = qnorm(.975)*std_err4tempgone,
+         ci4temphome = qnorm(.975)*std_err4temphome
+        ) %>%
+  select(-std_err4tempnite, -std_err4temphome, -std_err4tempgone) %>%
+  tidyr::pivot_longer( cols = starts_with('w4'),
+                       names_to = 'temp_type',
+                       values_to = 'mean_temp',
+                       ) %>%
+  mutate(ci = case_when(temp_type == 'w4tempnite' ~ ci4tempnite,
+                        temp_type == 'w4tempgone' ~ ci4tempgone,
+                        temp_type == 'w4temphome' ~ ci4temphome)) %>%
+  ggplot(aes(x = uatyp, y = mean_temp, fill = temp_type)) +
+  geom_bar(stat = "identity", position = 'dodge') +
+  geom_errorbar(aes(ymin = mean_temp - ci, ymax = mean_temp + ci), 
+                width = 0.5, position = position_dodge(0.9)) +
+  facet_wrap(~ division, nrow = 5) + xlab('Urban Type') + 
+  ylab('Temperature') + 
+  ggtitle('Average Winter Home Temperatures') +
+  theme_light()
+temp_replicate
+```
+
+## Question 1.d
+
+```{r, echo = FALSE}
+decode_equipmuse = function(x) {
+  if(!as.numeric(x)) stop('Invaild input for decode_equipmuse!')
+  x = as.character(x)
+  switch(x,
+         "1" = "Set one temperature",
+         "2" = "Manually adjust it at night or go out",
+         "3" = "Automatically adjust the temperature ",
+         "4" = "As needed",
+         "5" = "Does not control it",
+         "9" = "Other"
+  )
+}
+decode_all_equipmuse = function(x) {
+  # Vectorizes decode_equipmuse above
+  #
+  # Args: 
+  #  x: a vector of integer-valued equipmuse
+  #
+  # Returns: A vector of equipmuse labes or a "list" if some are unmatched.
+  sapply(x, decode_equipmuse)
+}
+
+## Function median:
+my_median = function(x,y) {
+  x = sort(x)
+  i = 1
+  cumu = 0
+  while (i <= length(x)) {
+    cumu = cumu + x[i]
+    if (cumu/sum(x) >= 0.5) {
+      return(y[i])
+      }
+    else {
+      i = i + 1
+      }
+  }
+}
+
+# Median for weighted temp difference:
+temp_median = recs %>% 
+  filter(TEMPNITE >= 0 , EQUIPMUSE >= 0 , TEMPHOME >= 0) %>%
+  mutate(equipuse = decode_all_equipmuse(EQUIPMUSE)) %>%
+  select(TEMPHOME, TEMPNITE, weight = NWEIGHT, equipuse) %>%
+  group_by(equipuse) %>%
+  summarize(mean_median = my_median(weight, (TEMPHOME - TEMPNITE)))
+
+repl_median = recs %>% 
+  filter(TEMPNITE >= 0 , EQUIPMUSE >= 0 , TEMPHOME >= 0) %>%
+  gather(key = 'replicate', value = 'BRRWT', BRRWT1:BRRWT96) %>%
+  mutate(equipuse = decode_all_equipmuse(EQUIPMUSE)) %>%
+  select(TEMPHOME, TEMPNITE, BRRWT, replicate, equipuse) %>%
+  group_by(equipuse,replicate) %>%
+  summarize(rep_median = my_median(BRRWT, (TEMPHOME - TEMPNITE))) %>%
+  ungroup() %>%
+  left_join(temp_median, by = c('equipuse')) %>%
+  group_by(equipuse) %>%
+  summarize( mean_median = mean_median[1],
+             std_err =  sqrt( mean( {rep_median - mean_median}^2 )*4/96 )) %>%
+  mutate( lwr = mean_median - qnorm(.975)*std_err,
+          upr = mean_median + qnorm(.975)*std_err
+  ) %>%
+  select(-std_err) %>%
+  knitr::kable(digits = 1, caption = paste('
+                                     Median difference between the daytime 
+                                      (with someone home) 
+                                      and nighttime temperatures for 
+                                      each level of"main heating equipment 
+                                      household behavior".'), 
+               col.names = c('Heating Equipment Behavior', 
+                             'Difference', 
+                             'Lower Bound', 'Upper Bound'))%>%
+  kable_styling(bootstrap_options = "striped",  full_width = F)
+repl_median
+```
+
+## Question 2.a
+
+```{r}
+# Data:
+kh2017 <- KH2017_raw
+source('ps2_q2_funcs.R')
+```
+
+
+```{r, echo = FALSE}
+trans = function(dat) {
+  dat = as_tibble(dat)
+  dat = select(dat,subject_nr,count_trial,xpos_get_response, 
+               ypos_get_response, timestamps_get_response)
+  x = as.list(as.character(dat$xpos_get_response))
+  x = str_sub(x,start = 2, end = (str_length(x)-1))
+  x = str_split(x,', ')
+  x = lapply(x, FUN = as.numeric)
+  #similar for y and t
+  y = as.list(as.character(dat$ypos_get_response))
+  y = str_sub(y,start = 2, end = (str_length(y)-1))
+  y = str_split(y,', ')
+  y = lapply(y, FUN = as.numeric)
+  t = as.list(as.character(dat$timestamps_get_response))
+  t = str_sub(t,start = 2, end = (str_length(t)-1))
+  t = str_split(t,', ')
+  t = lapply(t, FUN = as.numeric)
+  dattran = transmute(dat,subject_nr,count_trial,x,y,t)
+  return(dattran)
+}
+
+```
+
+## Question 2.b - c
+
+```{r, echo = FALSE}
+recsq2c <- filter(kh2017,correct == 1)
+recsq2ctrans = trans(recsq2c)
+n = nrow(recsq2c)
+result1 = matrix(data = NA, nrow=n, ncol = 1)
+result2 = matrix(data = NA, nrow=n, ncol = 1)
+result3 = matrix(data = NA, nrow=n, ncol = 1)
+result4 = matrix(data = NA, nrow=n, ncol = 1)
+
+for (i in 1:n) {
+  mat = cbind(unlist(recsq2ctrans$x[i]),
+              unlist(recsq2ctrans$y[i]),
+              unlist(recsq2ctrans$t[i]))
+  mat = normalize_traj(mat)
+  result1[i] = comp_dist(mat[,1],mat[,2])
+  result2[i] = max( abs(mat[, 2]) )
+  result3[i] = mean( abs(mat[, 2]) )
+  result4[i] = comp_auc(mat[,1],mat[,2])
+}
+result4q2c = transmute(recsq2ctrans,subject_nr,count_trial, 
+                  Condition = recsq2c$Condition,
+                  Exemplar = recsq2c$Exemplar,
+                  tot_dist = result1,
+                  max_abs_dev = result2,
+                  avg_abs_dev = result3,
+                  AUC = result4) 
+output = result4q2c %>%
+  knitr::kable(digits = 1, format = 'markdown',
+             caption = paste('Measures of curvature computed from the KH2017_raw data set.'))
+output
+```
+
+## Question 2.d
+
+```{r, echo = FALSE}
+s0 = summary(lmer(log(tot_dist) ~ Condition + (1 | subject_nr) + (1 |Exemplar), data = result4q2c))$coefficients
+
+summaryintotal0 = c(estimate = s0[,1],lower = s0[,1] - 2 * s0[,2],
+                    upper = s0[,1] + 2 * s0[,2])
+summaryintotal0 = matrix(summaryintotal0, ncol = 3, nrow = 2,
+                         dimnames = list(c('Intercept','Condition'),
+                                       c('Estimate_tot_dist', 'Lower_tot_dist',
+                                         'Upper_tot_dist')))
+
+
+s1 = summary(lmer(log(max_abs_dev) ~ Condition + (1 | subject_nr) + (1 | Exemplar),data = result4q2c))$coefficients
+summaryintotal1 = c(estimate = s1[,1],lower = s1[,1] - 2 * s1[,2],
+                    upper = s1[,1] + 2 * s1[,2])
+summaryintotal1 = matrix(summaryintotal1,ncol = 3, nrow = 2,
+                      dimnames = list(c('Intercept','Condition'),
+                                      c('Estimate_max_abs_dev',
+                                        'Lower_max_abs_dev',
+                                        'Upper_max_abs_dev')))
+
+s2 = summary(lmer(log(avg_abs_dev) ~ Condition + (1 | subject_nr) + (1 | Exemplar), 
+    data = result4q2c))$coefficients
+summaryintotal2 = c(estimate = s2[,1],lower = s2[,1] - 2 * s2[,2],
+                    upper = s2[,1] + 2 * s2[,2])
+summaryintotal2 = matrix(summaryintotal2, ncol = 3, nrow = 2,
+                      dimnames = list(c('Intercept','Condition'),
+                                      c('Estimate_avg_abs_dev',
+                                        'Lower_avg_abs_dev',
+                                        'Upper_avg_abs_dev')))
+
+s3 = summary(lmer(log(abs(AUC)) ~ Condition + (1 | subject_nr) + (1 | Exemplar),data = result4q2c))$coefficients
+summaryintotal3 = c(estimate = s3[,1], lower = s3[,1] - 2 * s3[,2],
+                    upper = s3[,1] + 2 * s3[,2])
+summaryintotal3 = matrix(summaryintotal3, ncol = 3, nrow = 2,
+                      dimnames = list(c('Intercept','Condition'),
+                                      c('Estimate_AUC','Lower_AUC','Upper_AUC')))
+
+sumary1 <- cbind(summaryintotal0, summaryintotal1) 
+sumary2 <- cbind(summaryintotal2, summaryintotal3)
+sumary3 <- rbind(sumary1, sumary2)
+knitr::kable(sumary3, digits = 1, caption = '*Fitness of different models per curvature measure with "Condition".*')  %>%
+  kable_styling(bootstrap_options = "striped", font_size = 6, full_width = F) 
+sumary3
+```
+
+Which one does condition have the largest (relative) effect?
+
+From the summary above, we can find that avg_abs_dev has the largest relative effect.
+
+Since the coefficient of Condition in that model has largest abs value. The larger departure from 0 means has bigger effect.
+That is the same for confidence intervial. The CI for the third model has the largest departure from 0.
+
+
+## Question 1.b
+
+```{r, echo=FALSE}
+# Using the decode functions above get a table in one-line:
+fuel_pro = recs %>% 
+  filter(HEATHOME == 1) %>%
+  gather(key = 'replicate', value = 'BRRWT', BRRWT1:BRRWT96) %>%
+  mutate(division = decode_all_division(DIVISION), 
+         uatyp = decode_all_uatyp(UATYP10), 
+         fuel = decode_all_fuel(FUELHEAT)) %>%
+  select(division, uatyp, fuel, heathome = HEATHOME, 
+         weight = NWEIGHT, replicate, BRRWT) %>%
+  replace_na(list(weight = 0)) %>%
+  group_by(division, uatyp, fuel, replicate) %>%
+  summarize(repweight = sum(BRRWT), fuelpro = sum(weight)) %>%
+  group_by(division, uatyp, replicate) %>%
+  mutate(reppro = 100 * repweight / sum(repweight), 
+        pro = 100 * fuelpro / sum(fuelpro)) %>%
+  group_by(division, uatyp, fuel)  %>%
+  summarize(pro = pro[1],
+             std_err =  sqrt(mean({reppro - pro}^2)*4/96)) %>%
+  mutate(lwr = pro - qnorm(.975)*std_err,
+        upr = pro + qnorm(.975)*std_err,
+        pro = sprintf("(%f,%f) ;\n %f",lwr,upr,pro) ) %>%
+  select(-std_err, -lwr, -upr) %>%
+  tidyr::pivot_wider(names_from = fuel, 
+                     values_from = pro) %>%
+  knitr::kable(digits = 1, caption = paste('Proprtion of fuel types by division and urban type.','Each row shows the fuel type distribution for one or more division and urban types.')) %>%
+  kable_styling(bootstrap_options = "striped", font_size = 4, full_width = F) %>%
+    kableExtra::landscape() 
+fuel_pro
+```
